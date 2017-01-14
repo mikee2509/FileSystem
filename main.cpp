@@ -20,12 +20,12 @@ int main(int argc, char **argv)
             fs.create(argv[2]);
         else if (strcmp("-i", argv[1]) == 0 && argc == 4)
             fs.insert(argv[2], argv[3]);
+        else if (strcmp("-rm", argv[1]) == 0 && argc == 4)
+            fs.remove(argv[2], argv[3]);
+        else if (strcmp("-g", argv[1]) == 0 && argc == 4)
+            fs.get(argv[2], argv[3]);
 //    else if (strcmp("-d", argv[1]) == 0 && argc == 3)
 //        exitCode = deleteContainer(argv[2]);
-//    else if (strcmp("-cpFrom", argv[1]) == 0 && argc == 4)
-//        exitCode = copyFileFromContainer(argv[2], argv[3]);
-//    else if (strcmp("-rm", argv[1]) == 0 && argc == 4)
-//        exitCode = removeFile(argv[2], argv[3]);
 //    else if (strcmp("-ls", argv[1]) == 0 && (argc == 3 || argc == 4))
 //        exitCode = argc == 3 ? listFiles(argv[2], "") : listFiles(argv[2], argv[3]);
 //    else if (strcmp("-s", argv[1]) == 0 && argc == 3)

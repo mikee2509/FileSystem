@@ -11,14 +11,20 @@ class FileSystem {
 public:
     const static int BLOCK_SIZE = 4; //in kilobytes
     const static int CONTAINER_SIZE = 128; //in kilobytes
+    const static int MAX_FILENAME_LENGTH = 15;
     const static int LAST_BLOCK_OF_FILE = -1;
     const static int END_OF_BLOCKS_TABLE = -2;
-    void create(char *container);
-    void insert(char *container, char *fileName);
+
     class File;
     class Directory;
 
-    int getFileSize(std::fstream &fs); //in bytes
+    void create(char *container);
+    void insert(char *container, char *fileName);
+    void remove(char *container, char *fileName);
+    void get(char *container, char *fileName);
+
+private:
+    long long int getFileSize(std::fstream &fs); //in bytes
 
     void seekBlock(int block, std::fstream &fs); //move file cursor to a given block
 
@@ -38,17 +44,24 @@ public:
     void saveDirectory(Directory dir, std::fstream &fs); //save Directory to a file
 
     //Save File metadata object at position *index* in a file
-    void saveFile(File file, int index, std::fstream &fs);
+    void saveFileMetadata(File file, int index, std::fstream &fs);
 
-    File getFile(int index, std::fstream &fs); //get File metadata object of given *index* from a file stream
+    File getFileMetadata(int index, std::fstream &fs); //get File metadata object of given *index* from a file stream
 
     //Get index of an empty position in Dictionary block
     int getEmptyFileMetadataSlot(std::fstream &fs);
+
+    int findFileByName(char *fileName, std::fstream &fs);
+
+    void checkFileName(char *fileName);
+
+    std::fstream openContainer(char *container);
+
+    long long int getFileSize(int firstBlock, int lastBlockSize, std::fstream &fs);
 };
 
-
 class FileSystem::Directory {
-public:
+    friend class FileSystem;
     const static int LAST_DIRECTORY_BLOCK = -3;
     int nextDirectoryBlock; //number of the next Directory block
     int numOfFiles; //number of files in this Directory block
@@ -57,14 +70,14 @@ public:
 };
 
 class FileSystem::File {
-public:
-    char fileName[15];
+    friend class FileSystem;
+    char fileName[MAX_FILENAME_LENGTH];
     bool isActive; //can be replaced by a new file if false
-    int fileSize; //in bytes
+    int lastBlockSize; //number of bytes held in the last data block
     int firstDataBlock; //index in the blocks' table
 
-    File() : isActive(false), fileSize(0), firstDataBlock(0) {}
-    File(char *name, int size, int block) : isActive(true), fileSize(size), firstDataBlock(block)
+    File() : isActive(false), lastBlockSize(0), firstDataBlock(0) {}
+    File(char *name, int size, int block) : isActive(true), lastBlockSize(size), firstDataBlock(block)
     {
         strncpy(fileName, name, 15);
     }
