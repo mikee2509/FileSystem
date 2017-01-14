@@ -17,6 +17,7 @@ public:
 
     class File;
     class Directory;
+    class ContainerStream;
 
     void create(char *container);
     void insert(char *container, char *fileName);
@@ -24,61 +25,68 @@ public:
     void get(char *container, char *fileName);
 
 private:
+    ContainerStream openContainer(char *container);
+
     long long int getFileSize(std::fstream &fs); //in bytes
 
-    void seekBlock(int block, std::fstream &fs); //move file cursor to a given block
-
-    int getNumberOfBlocks(int size); //get number of blocks needed to hold *size* bytes
-
-    //Move file cursor to a file with given *fileIndex* in Directory block
-    void seekFileMetadata(int fileIndex, std::fstream &fs);
-
-    //Get index numbers of blocks that can be filled with data
-    std::vector<int> getEmptyBlocks(int nBlocks, std::fstream &fs);
-
-    //Move file cursor to *index* position in blocks' table
-    void seekBlocksTableElement(int index, std::fstream &fs);
-
-    Directory getDirectory(std::fstream &fs); //get Directory from a file stream
-
-    void saveDirectory(Directory dir, std::fstream &fs); //save Directory to a file
-
-    //Save File metadata object at position *index* in a file
-    void saveFileMetadata(File file, int index, std::fstream &fs);
-
-    File getFileMetadata(int index, std::fstream &fs); //get File metadata object of given *index* from a file stream
-
-    //Get index of an empty position in Dictionary block
-    int getEmptyFileMetadataSlot(std::fstream &fs);
-
-    int findFileByName(char *fileName, std::fstream &fs);
+    int getNumberOfBlocks(long long int size); //Get number of blocks needed to hold *size* bytes
 
     void checkFileName(char *fileName);
-
-    std::fstream openContainer(char *container);
-
-    long long int getFileSize(int firstBlock, int lastBlockSize, std::fstream &fs);
 };
+
+
+class FileSystem::ContainerStream : public std::fstream {
+    friend class FileSystem;
+
+    ContainerStream() : std::fstream() {}
+    ContainerStream(const ContainerStream &other) : std::fstream() {}
+
+    void seekBlock(int block); //Move file cursor to a given block
+
+    void seekBlocksTableElement(int index); //Move file cursor to *index* position in blocks' table
+
+    void seekFileMetadata(int fileIndex); //Move file cursor to a file with given *fileIndex* in Directory block
+
+    std::vector<int> getEmptyBlocks(int nBlocks); //Get index numbers of blocks that can be filled with data
+
+    Directory getDirectory(); //Get Directory from a file stream
+
+    void saveDirectory(Directory dir); //Save Directory to a file
+
+    File getFileMetadata(int index); //Get File metadata object of given *index* from a file stream
+
+    void saveFileMetadata(File file, int index); //Save File metadata object at position *index* in a file
+
+    int getEmptyFileMetadataSlot(); //Get index of an empty position in Dictionary block
+
+    int findFileByName(char *fileName);
+
+    long long int getFileSize(int firstBlock, int lastBlockSize);
+};
+
 
 class FileSystem::Directory {
     friend class FileSystem;
+
     const static int LAST_DIRECTORY_BLOCK = -3;
     int nextDirectoryBlock; //number of the next Directory block
     int numOfFiles; //number of files in this Directory block
+
     Directory(): nextDirectoryBlock(LAST_DIRECTORY_BLOCK), numOfFiles(0) {}
     Directory(int ndBlock, int nFiles): nextDirectoryBlock(ndBlock), numOfFiles(nFiles) {}
 };
 
+
 class FileSystem::File {
     friend class FileSystem;
+
     char fileName[MAX_FILENAME_LENGTH];
     bool isActive; //can be replaced by a new file if false
     int lastBlockSize; //number of bytes held in the last data block
     int firstDataBlock; //index in the blocks' table
 
     File() : isActive(false), lastBlockSize(0), firstDataBlock(0) {}
-    File(char *name, int size, int block) : isActive(true), lastBlockSize(size), firstDataBlock(block)
-    {
+    File(char *name, int size, int block) : isActive(true), lastBlockSize(size), firstDataBlock(block) {
         strncpy(fileName, name, 15);
     }
 };
