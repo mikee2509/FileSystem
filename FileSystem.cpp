@@ -254,7 +254,7 @@ FileSystem::ContainerStream FileSystem::openContainer(char *container) {
 
 long long int FileSystem::getFileSize(fstream &fs) {
     fs.seekg (0, fs.end);
-    long long length = fs.tellg();
+    long long int length = fs.tellg();
     fs.seekg (0, fs.beg);
     return length;
 }
@@ -269,7 +269,8 @@ void FileSystem::checkFileName(char *fileName) {
     if (length > MAX_FILENAME_LENGTH) throw runtime_error("Filename is too long");
     for (int i = 0; i < length; i++) {
         if (isalnum(fileName[i]) == 0)
-            throw runtime_error("Filename can only consist of alphanumeric characters");
+            if(ispunct(fileName[i]) == 0)
+                throw runtime_error("Filename can only consist of alphanumeric or punctuation characters");
     }
 }
 
@@ -297,11 +298,9 @@ vector<int> FileSystem::ContainerStream::getEmptyBlocks(int nBlocks) {
     for (int i = 0; i < nBlocks; ++i) {
         do {
             read((char*)&blocks[i], sizeof(int));
-        } while (blocks[i] != 0 || blocks[i] == END_OF_BLOCKS_TABLE);
-
-        if(blocks[i] == END_OF_BLOCKS_TABLE) {
-            throw runtime_error("Not enough space available");
-        }
+            if(blocks[i] == END_OF_BLOCKS_TABLE)
+                throw runtime_error("Not enough space available");
+        } while (blocks[i] != 0);
         blocks[i] = (int) tellg()/sizeof(int)-1;
     }
     for (int i = 0; i < nBlocks-1; ++i) {
