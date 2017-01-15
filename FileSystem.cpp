@@ -1,8 +1,7 @@
-#include <iostream>
 #include "FileSystem.h"
 using namespace std;
 
-void FileSystem::create(char *container) {
+void FileSystem::createContainer(char *container) {
     //Create container file
     string c(container);
     if(ifstream(container))
@@ -29,7 +28,7 @@ void FileSystem::create(char *container) {
     cs.close();
 }
 
-void FileSystem::insert(char *container, char *fileName) {
+void FileSystem::insertFile(char *container, char *fileName) {
     checkFileName(fileName);
 
     //Open files
@@ -55,7 +54,6 @@ void FileSystem::insert(char *container, char *fileName) {
     char buffer[bufferSize];
     file.seekg(0, file.beg);
     for(int block : fileBlocks) {
-        cout << "Copying data to block: " << block << endl;
         file.read(buffer, bufferSize * sizeof(char));
         cs.seekBlock(block);
         cs.write(buffer, (fileSize < bufferSize ? fileSize : bufferSize) * sizeof(char));
@@ -78,7 +76,7 @@ void FileSystem::insert(char *container, char *fileName) {
     file.close();
 }
 
-void FileSystem::remove(char *container, char *fileName) {
+void FileSystem::removeFile(char *container, char *fileName) {
     checkFileName(fileName);
     ContainerStream cs = openContainer(container);
 
@@ -106,7 +104,7 @@ void FileSystem::remove(char *container, char *fileName) {
     cs.close();
 }
 
-void FileSystem::get(char *container, char *fileName) {
+void FileSystem::getFile(char *container, char *fileName) {
     checkFileName(fileName);
     ContainerStream cs = openContainer(container);
 
@@ -141,6 +139,109 @@ void FileSystem::get(char *container, char *fileName) {
     file.close();
 }
 
+void FileSystem::deleteContainer(char *container) {
+#ifdef __linux__
+    remove(container);
+#endif // __linux__
+
+#ifdef WIN32
+    DeleteFile(container);
+#endif // WIN32
+}
+
+void FileSystem::listFiles(char *container, const char *filter) {
+    ContainerStream cs = openContainer(container);
+    Directory dir = cs.getDirectory();
+    if(dir.numOfFiles == 0) {
+        cout << "Container is empty" << endl;
+        return;
+    }
+
+    string f(filter);
+    regex ex("[+]");
+    function<bool(char*, regex)> regex_function = [](char* a, regex b)->bool { return regex_search(a,b); };
+
+    if(f.empty()) {
+        ex.assign("[:alnum:]+");
+    }
+    else if(!regex_search(f, ex)) {
+        ex.assign(f);
+        regex_function = [](char* a, regex b)->bool { return regex_match(a,b); };
+    }
+    else if(f.front() == '+') {
+        ex.assign(f.substr(1, f.length()-1) + "$");
+    }
+    else if(f.back() == '+') {
+        ex.assign("^" + f.substr(0, f.length()-1));
+    }
+
+    stringstream message;
+    File temp;
+    int maxNumOfFiles = getNumOfFilesPerDirectoryBlock();
+    for (int i = 0; i < maxNumOfFiles; ++i) {
+        temp = cs.getFileMetadata(i);
+        if(temp.isActive && regex_function(temp.fileName, ex)) {
+            message << left << setw(MAX_FILENAME_LENGTH+3) << temp.fileName
+                    << cs.getFileSize(temp.firstDataBlock, temp.lastBlockSize) << endl;
+        }
+    }
+
+    if(message.str().empty()) {
+        cout << "No files matching given filter found" << endl;
+    } else {
+        cout << left << setw(MAX_FILENAME_LENGTH+3) << "FILENAME" << "SIZE [bytes]\n";
+        cout << message.str();
+    }
+
+    cs.close();
+}
+
+void FileSystem::showBlocksTable(char *container) {
+    ContainerStream cs = openContainer(container);
+    cout << "Block size [kB]: " << BLOCK_SIZE << endl;
+    cout << "Container size [kB]: " << CONTAINER_SIZE << endl;
+    cout << "Types: table - blocks' table\n       dir - directory block\n       data - data block\n\n";
+    cout << left << setw(5) << "BLOCK" << "  " << setw(10) << "ADDRESS"
+         << setw(8) << "TYPE" << "FILE" << endl;
+
+    unordered_map<int, string> map;
+    File temp;
+    int maxNumOfFiles = getNumOfFilesPerDirectoryBlock();
+    for (int i = 0; i < maxNumOfFiles; ++i) {
+        temp = cs.getFileMetadata(i);
+        if(temp.isActive) {
+            int j = 1;
+            int block = temp.firstDataBlock;
+            stringstream s;
+            do {
+                s << "(" << j++ << ") " << temp.fileName;
+                map[block] = s.str();
+                s.str(string());
+                cs.seekBlocksTableElement(block);
+                cs.read((char*)&block, sizeof(int));
+            } while (block != LAST_BLOCK_OF_FILE);
+        }
+    }
+
+    cout << left << setw(5) << 1 << "  " << setw(10) << 0 << "table" << endl;
+    cout << left << setw(5) << 2 << "  " << setw(10) << BLOCK_SIZE*1024 << "dir" << endl;
+
+    int nBlocks = CONTAINER_SIZE / BLOCK_SIZE;
+    int state;
+    for (int b = 2; b < nBlocks; ++b) {
+        cout << left << setw(5) << b+1 << "  " << setw(10) << b*BLOCK_SIZE*1024 << setw(8);
+        cs.seekBlocksTableElement(b);
+        cs.read((char*)&state, sizeof(int));
+        if(state == 0) {
+            cout << "empty" << endl;
+        } else {
+            cout << "data" << map[b] << endl;
+        }
+    }
+    
+    cs.close();
+}
+
 FileSystem::ContainerStream FileSystem::openContainer(char *container) {
     ContainerStream fs;
     fs.open(container, ContainerStream::in | ContainerStream::out | ContainerStream::binary);
@@ -151,7 +252,7 @@ FileSystem::ContainerStream FileSystem::openContainer(char *container) {
     return fs;
 }
 
-long long int FileSystem::getFileSize(std::fstream &fs) {
+long long int FileSystem::getFileSize(fstream &fs) {
     fs.seekg (0, fs.end);
     long long length = fs.tellg();
     fs.seekg (0, fs.beg);
@@ -165,11 +266,16 @@ int FileSystem::getNumberOfBlocks(long long int size) {
 
 void FileSystem::checkFileName(char *fileName) {
     size_t length = strlen(fileName);
-    if (length > 15) throw runtime_error("Filename is too long");
+    if (length > MAX_FILENAME_LENGTH) throw runtime_error("Filename is too long");
     for (int i = 0; i < length; i++) {
         if (isalnum(fileName[i]) == 0)
             throw runtime_error("Filename can only consist of alphanumeric characters");
     }
+}
+
+int FileSystem::getNumOfFilesPerDirectoryBlock() {
+    float x = (float) (BLOCK_SIZE * 1024 - sizeof(Directory)) / sizeof(File);
+    return (int) floorf(x);
 }
 
 
@@ -191,7 +297,6 @@ vector<int> FileSystem::ContainerStream::getEmptyBlocks(int nBlocks) {
     for (int i = 0; i < nBlocks; ++i) {
         do {
             read((char*)&blocks[i], sizeof(int));
-            cout << "position: " << tellg()/sizeof(int)-1 << "\tval: " << blocks[i] << endl;
         } while (blocks[i] != 0 || blocks[i] == END_OF_BLOCKS_TABLE);
 
         if(blocks[i] == END_OF_BLOCKS_TABLE) {
@@ -246,10 +351,9 @@ int FileSystem::ContainerStream::getEmptyFileMetadataSlot() {
 
 int FileSystem::ContainerStream::findFileByName(char *fileName) {
     File temp;
-    float x = (float) (BLOCK_SIZE * 1024 - sizeof(Directory)) / sizeof(File);
-    int nOfFilesInDirectory = (int) floorf(x);
+    int maxNumOfFiles = getNumOfFilesPerDirectoryBlock();
     int searchedFileIndex = -1;
-    for (int i = 0; i < nOfFilesInDirectory; ++i) {
+    for (int i = 0; i < maxNumOfFiles; ++i) {
         temp = getFileMetadata(i);
         if(strcmp(temp.fileName, fileName) == 0 && temp.isActive) {
             searchedFileIndex = i;

@@ -6,12 +6,16 @@
 #include <bitset>
 #include <vector>
 #include <math.h>
+#include <iostream>
+#include <iomanip>
+#include <regex>
+#include <unordered_map>
 
 class FileSystem {
 public:
     const static int BLOCK_SIZE = 4; //in kilobytes
     const static int CONTAINER_SIZE = 128; //in kilobytes
-    const static int MAX_FILENAME_LENGTH = 15;
+    const static int MAX_FILENAME_LENGTH = 14;
     const static int LAST_BLOCK_OF_FILE = -1;
     const static int END_OF_BLOCKS_TABLE = -2;
 
@@ -19,10 +23,13 @@ public:
     class Directory;
     class ContainerStream;
 
-    void create(char *container);
-    void insert(char *container, char *fileName);
-    void remove(char *container, char *fileName);
-    void get(char *container, char *fileName);
+    void createContainer(char *container);
+    void insertFile(char *container, char *fileName);
+    void removeFile(char *container, char *fileName);
+    void getFile(char *container, char *fileName);
+    void deleteContainer(char *container);
+    void listFiles(char *container, const char *filter);
+    void showBlocksTable(char *container);
 
 private:
     ContainerStream openContainer(char *container);
@@ -32,6 +39,8 @@ private:
     int getNumberOfBlocks(long long int size); //Get number of blocks needed to hold *size* bytes
 
     void checkFileName(char *fileName);
+
+    static int getNumOfFilesPerDirectoryBlock();
 };
 
 
@@ -80,14 +89,14 @@ class FileSystem::Directory {
 class FileSystem::File {
     friend class FileSystem;
 
-    char fileName[MAX_FILENAME_LENGTH];
+    char fileName[MAX_FILENAME_LENGTH+1];
     bool isActive; //can be replaced by a new file if false
     int lastBlockSize; //number of bytes held in the last data block
     int firstDataBlock; //index in the blocks' table
 
     File() : isActive(false), lastBlockSize(0), firstDataBlock(0) {}
     File(char *name, int size, int block) : isActive(true), lastBlockSize(size), firstDataBlock(block) {
-        strncpy(fileName, name, 15);
+        strncpy(fileName, name, MAX_FILENAME_LENGTH);
     }
 };
 
